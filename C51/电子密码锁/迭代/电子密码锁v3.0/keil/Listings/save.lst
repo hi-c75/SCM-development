@@ -1,0 +1,138 @@
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 19:41:45 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SAVE
+OBJECT MODULE PLACED IN .\Objects\save.obj
+COMPILER INVOKED BY: d:\work\keil\C51\BIN\C51.EXE save.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\sa
+                    -ve.lst) TABS(2) OBJECT(.\Objects\save.obj)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <save.h>
+   3          #include <lcd.h>
+   4          
+   5          
+   6          void delay()
+   7          {
+   8   1        unsigned char a,b;
+   9   1        for(b=1;b>0;b--)
+  10   1          for(a=1;a>0;a--);
+  11   1      }
+  12          
+  13          //start:
+  14          void start() //Æô¶¯i2c
+  15          {
+  16   1       SDA = 1;
+  17   1       SCL = 1;
+  18   1       delay();//ÑÓÊ±±ØÐë´óÓÚ4.7us£¬´ËÔ¼ÎªÎåÎ¢Ãë
+  19   1       SDA = 0; //ÔÚSCLÎª¸ßµçÆ½Ê±£¬SDAÒ»¸öÏÂ½µÑØÎªÆô¶¯ÐÅºÅ
+  20   1       delay();
+  21   1      }
+  22          //stop:
+  23          void stop() //Í£Ö¹i2c
+  24          {
+  25   1       SDA = 0;
+  26   1       SCL = 1;
+  27   1       delay();
+  28   1       SDA = 1; //ÔÚSCLÎª¸ßµçÆ½Ê±£¬SDASDAÒ»¸öÉÏÉýÑØÎªÍ£Ö¹ÐÅºÅ
+  29   1       delay();
+  30   1      }
+  31          //ack:
+  32          void ack() //Ó¦´ðÐÅºÅ0
+  33          {
+  34   1       u8 i = 0; //µÈ´ý±äÁ¿
+  35   1       SCL = 1;//ÔÚSCLÎª¸ßµçÆ½ÆÚ¼äµÈ´ýÓ¦´ð
+  36   1       delay();
+  37   1       while((SDA == 1) && i < 250)//ÈôÎªÓ¦´ð0¼´ÍË³ö£¬´Ó»úÏòÖ÷»ú·¢ËÍÓ¦´ðÐÅºÅ
+  38   1       i++;//µÈ´ýÒ»¶ÎÊ±¼ä
+  39   1       SCL = 0; //Ó¦´ðÖ®ºó½«SCLÀ­µÍ
+  40   1       delay();
+  41   1      }
+  42          //nack:
+  43          void nack() //·ÇÓ¦´ð
+  44          {
+  45   1       SCL = 1;//ÔÚSCLÎª¸ßµçÆ½ÆÚ¼ä£¬ÓÉÖ÷»úÏò´Ó»ú·¢ËÍÒ»¸ö1£¬·ÇÓ¦´ðÐÅºÅ
+  46   1       delay();
+  47   1       SDA = 1;
+  48   1       SCL = 0; //Ó¦´ðÖ®ºó½«SCLÀ­µÍ
+  49   1       delay();
+  50   1      }
+  51          
+  52          //¼ì²éÓ¦´ð
+  53          bit cack()
+  54          {SDA = 1;
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 19:41:45 PAGE 2   
+
+  55   1      SCL =1;
+  56   1      F0= SDA;
+  57   1      SCL= 0;
+  58   1      return(F0);}
+  59          //·¢ËÍÒ»×Ö½Ú
+  60          void Wr1b(unsigned char x){
+  61   1      unsigned char i;
+  62   1      for(i=0;i<8;i++)
+  63   1      if((x&0x80)==0)SDA=0;
+  64   1      else SDA=1;
+  65   1      SCL=1;
+  66   1      SCL=0;
+  67   1      x<<=1;}
+  68          
+  69          unsigned char Rd1b(){
+  70   1      unsigned char i,x=0;
+  71   1      SDA=1;
+  72   1      for(i=0;i<8;i++){
+  73   2      SCL=1;
+  74   2      x=(x<<1)|SDA;
+  75   2      SCL=0;}
+  76   1      return(x);}
+  77          
+  78          void WRNB(u8 a[], u8 n, u8 sadr){//Ð´AT24C>cx n×Ö½Ú×Óº¯Êý//ÐÎ²Î£ºÐ´ÈëÊý¾ÝÊý×éa[]£¬Ð´ÈëÊý¾Ý×Ö½ÚÊýn£¬Ð´Èëµ¥Ô
+             -ªÊ×µØÖ·sadr
+  79   1      unsigned char i;//¶¨ÒåÐòºÅ±äÁ¿i
+  80   1      unsigned int t;//¶¨ÒåÑÓÊ±²ÎÊýt
+  81   1      start();//·¢Æô¶¯ÐÅºÅ
+  82   1      Wr1b(0xa0);//·¢ËÍÐ´Ñ°Ö·×Ö½Ú
+  83   1      cack();//¼ì²éÓ¦´ð
+  84   1      Wr1b(sadr); //·¢ËÍÐ´ÈëAT24CXXÆ¬ÄÚ×ÓµØÖ·
+  85   1      cack();//¼ì²éÓ¦´ð
+  86   1      for(i=0;i<n;i++){//Ñ­»·Ð´Èën×Ö½Ú
+  87   2      Wr1b(a[i]);//Ð´ÈëI2CÒ»¸ö×Ö½Ú
+  88   2      cack();}//¼ì²éÓ¦´ð
+  89   1      stop();//n¸öÊý¾ÝÐ´ÈëÍê±Ï£¬·¢ÖÕÖ¹ÐÅ
+  90   1      for(t=0;t<1000;t++);}//Ò³Ð´ÑÓÊ±5ms
+  91          
+  92          void RDNB(u8 b[], u8 n, u8 sadr){//¶ÁAT24Cxxn×Ö½Ú×Óº¯Êý//ÐÎ²Î£º½ÓÊÕÊý¾ÝÊý×éb[]£¬½ÓÊÕÊý¾Ý×Ö½ÚÊýn£¬¶Á³öµ¥ÔªÊ
+             -×µØÖ·sadr
+  93   1      unsigned char i;//¶¨ÒåÐòºÅ±äÁ¿i
+  94   1      start(); //·¢Æô¶¯ÐÅºÅ
+  95   1      Wr1b(0xa0);//·¢ËÍÐ´Ñ°Ö·×Ö½Ú
+  96   1      cack();//¼ì²éÓ¦´ð
+  97   1      Wr1b(sadr);//·¢ËÍ¶ÁAT24CXXÆ¬ÄÚÊ×µØÖ·
+  98   1      cack();//¼ì²éÓ¦´ð
+  99   1      start();//ÔÙ´Î·¢Æô¶¯ÐÅºÅ
+ 100   1      Wr1b(0xa1);//·¢ËÍ¶ÁÑ°Ö·×Ö½Ú
+ 101   1      cack();//¼ì²éÓ¦´ð
+ 102   1      for(i=0;i<n-1;i++){//Ñ­»·¶Á³ö(n-1)¸ö×Ö½Ú
+ 103   2        b[i]=Rd1b();//½ÓÊÕ1¸ö×Ö½Ú
+ 104   2      ack();}//·¢ËÍÓ¦´ðA
+ 105   1      b[i]=Rd1b();//½ÓÊÕ×îºóÒ»¸ö×Ö½Ú
+ 106   1      nack();//·¢ËÍÓ¦´ða
+ 107   1      stop();}//n¸öÊý¾Ý½ÓÊÕÍê±Ï£¬·¢ÖÕÖ¹
+ 108          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    337    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 19:41:45 PAGE 3   
+
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      10
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

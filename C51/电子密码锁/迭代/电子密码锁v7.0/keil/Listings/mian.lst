@@ -1,0 +1,431 @@
+C51 COMPILER V9.60.0.0   MIAN                                                              02/22/2023 14:14:46 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MIAN
+OBJECT MODULE PLACED IN .\Objects\mian.obj
+COMPILER INVOKED BY: d:\work\keil\C51\BIN\C51.EXE mian.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\mi
+                    -an.lst) TABS(2) OBJECT(.\Objects\mian.obj)
+
+line level    source
+
+   1          /**************************************************************************************
+   2          *                 电子密码锁                          *
+   3          硬件连接：
+   4                     P1 --> 矩阵键盘
+   5                     P34--> EEPROM模块SCL
+   6                     P35--> EEPROM模块SDA
+   7                     P21--> 蜂鸣器
+   8                     P36--> LED_GREEN
+   9                     
+  10                     矩阵键盘：
+  11                     7      8      9       $
+  12                     
+  13                     4      5      6       $
+  14                     
+  15                     1      2      3       $
+  16                     
+  17                    确定    0  清除/返回  模式
+  18                    
+  19          软件设置：
+  20                    main.c --> 主函数
+  21                    key.c  --> 按键矩阵模块
+  22                    lcd.c  --> LCD702模块
+  23                    save.c --> EEPROM模块（AT24C04A）
+  24          
+  25          模式设置：
+  26                    模式0：登录界面
+  27                    模式1：修改密码界面
+  28                      - 修改初始密码
+  29                      - 修改用户添加密码
+  30                    模式2：添加新用户密码界面
+  31                    模式3：删除用户密码界面
+  32                      - 删除所有用户添加密码
+  33                      - 删除一位用户添加密码
+  34          注意事项：
+  35                  ·密码只能设置为6位
+  36                  ·新用户最多只能添加32位
+  37                  ·密码错误3次自动锁死，只能通过初始密码解锁
+  38                  
+  39          存在问题：
+  40                  ·输入密码后确定存在一定等待时间（尚待改进）
+  41                  ·转换模式存在一定的延迟，卡顿（尚待改进）
+  42          ***************************************************************************************/
+  43          #include <stdio.h>
+  44          #include <reg52.h>
+  45          #include <string.h>
+  46          #include <lcd.h> //  导入LCD702库
+  47          #include <key.h> //  导入矩阵按键库
+  48          #include <save.h> //  导入24C04库
+  49          
+  50          /*---全局变量声明---*/
+  51          //  lcd
+  52          u8 code start_line[]  = {"password:       "}; 
+  53          u8 code name[]    = {"Coded Lock( /3) "}; //显示名称
+  54          u8 code LockOpen[]  = {"      open      "};   //OPEN
+C51 COMPILER V9.60.0.0   MIAN                                                              02/22/2023 14:14:46 PAGE 2   
+
+  55          u8 code ResetOK[]   = {"ResetPasswordOK "};
+  56          u8 code initword[]  = {"Init password..."};
+  57          u8 code mode_line[] = {"==Mode Setting=="};
+  58          u8 code mode1[] = {"-Change Password"};
+  59          u8 code mode2[] = {"-Add New User   "};
+  60          u8 code mode2_0[] = {"=Change Setting="};
+  61          u8 code mode2_1[] = {"==>Init    Alone"};
+  62          u8 code mode2_2[] = {"   Init ==>Alone"};
+  63          u8 code mode3[] = {"-Delete Password"};
+  64          u8 code mode3_0[] = {"=Delete Setting="};
+  65          u8 code mode3_1[] = {"==>All     Alone"};
+  66          u8 code mode3_2[] = {"   All  ==>Alone"};
+  67          u8 code delete_s[] = {"Delete succeeded"};
+  68          u8 code delete_s2[] = {"No password set "};
+  69          u8 code Er_try[]    = {"error,try again!"};
+  70          u8 code try_again[] = {"Warn:A Lenth of "};
+  71          u8 code try_again2[] = {"password is six"};
+  72          u8 code username[] = {"=Administrator  "};
+  73          u8 code old_p[] = {"==Old Password=="};
+  74          u8 code new_p[] = {"==New Password=="};
+  75          u8 code warn_a[] = {"-Password exists"};
+  76          u8 code right_a[] = {"Adding succeeded"};
+  77          u8 code Locked[] = {"====UI locked==="};
+  78          
+  79          //  AT24C02A
+  80          u8 CurrentPassword[6];      //读取EEPROM密码暂存数组
+  81          u8 TempPassword[6];
+  82          u8 InitPassword[6]={0,0,0,0,0,0}; //  初始密码
+  83          u8 num=1; //  设置密码人数
+  84          u8 t=0; //  是否设置初始密码
+  85          u8 flag_d=0; //  判断密码是否正确
+  86          u8 flag_c; //  修改密码所在位置
+  87          u8 flag_chg=0; // 删除选择
+  88          //u8 temp=1; // 修改密码限制（只在修改密码是运行1次）
+  89          u8 n_alert = 0; // 错误次数
+  90          
+  91          //  按键
+  92          u8 flag=0; //  判断按键是否按下
+  93          u8 mode=0; //  模式设置
+  94          u8 k=0; //  输入密码位数
+  95          
+  96          
+  97          
+  98          void main()
+  99          {
+ 100   1        u8 i,j; 
+ 101   1        LcdInit(); //  LCD702初始化函数 
+ 102   1      //  Show_string1(initword);
+ 103   1      //  Show_string2(start_line);
+ 104   1        while(1){
+ 105   2          //  初始密码设置
+ 106   2      /*    while(mode==0&t==0) {
+ 107   2            KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 108   2            InPut(&k, &flag, start_line, TempPassword);
+ 109   2            if(flag==3&k<5){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);Show_string1(ini
+             -tword);Show_string2(start_line);}
+ 110   2            if(flag==3&k>=5){t=1;k=0;num+=1;flag=0;memcpy(InitPassword,TempPassword,sizeof(InitPassword));mode=0;Wr
+             -ite(TempPassword,0,6);}     
+ 111   2          }*/
+ 112   2          // 初始密码输入
+ 113   2          while(mode==0&t==0){Write(InitPassword,0,6);t=1;} 
+ 114   2          
+C51 COMPILER V9.60.0.0   MIAN                                                              02/22/2023 14:14:46 PAGE 3   
+
+ 115   2          //  模式0：登录界面
+ 116   2          if(mode==0) {   
+ 117   3            Show_string1(name);
+ 118   3            show_number(0x0b,3-n_alert);
+ 119   3            Show_string2(start_line);
+ 120   3            while(mode==0&t==1){  
+ 121   4              KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 122   4              InPut(&k, &flag, start_line, TempPassword);
+ 123   4              if(flag==3&k<5){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);Show_string1(na
+             -me);show_number(0x0b,3-n_alert);Show_string2(start_line);}
+ 124   4              //  判断密码正误
+ 125   4              if(flag==3&k>=5){
+ 126   5                for(i=0;i<num;i++){
+ 127   6                  Read(CurrentPassword,6*i,6);
+ 128   6                  for(j=0;j<6;j++){
+ 129   7                    if(CurrentPassword[j]==TempPassword[j]){flag_d=1;}
+ 130   7                    else{flag_d=0;break;}
+ 131   7                    //show_number(0x49+j,CurrentPassword[j]);
+ 132   7                  }
+ 133   6                  if(flag_d==1)break;
+ 134   6                }
+ 135   5                delay_s(2);
+ 136   5                if(flag_d==0){
+ 137   6                  ALERT=0;delay_ms(200);ALERT=1;Show_string2(Er_try);n_alert+=1;delay_s(1);
+ 138   6                  //  锁定
+ 139   6                  if (n_alert==3){
+ 140   7                    k=0,flag=0;
+ 141   7                    while(n_alert==3){
+ 142   8                      Show_string1(Locked);
+ 143   8                      KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 144   8                      InPut(&k, &flag, start_line, TempPassword);
+ 145   8                      if(flag==3&k<5){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);Show_string
+             -1(Locked);Show_string2(start_line);}
+ 146   8                      while(flag==3&k>=5){
+ 147   9                        Read(CurrentPassword,0,6);
+ 148   9                        for(j=0;j<6;j++){
+ 149  10                          if(CurrentPassword[j]==TempPassword[j]){flag_d=1;}
+ 150  10                          else{flag_d=0;break;}
+ 151  10                          //show_number(0x49+j,InitPassword[j]);
+ 152  10                        }
+ 153   9                        if(flag_d==0){Show_string2(Er_try);delay_s(1);Show_string2(start_line);flag=0;k=0;}
+ 154   9                        else {n_alert=0,k=0;Show_string1(name);show_number(0x0b,3-n_alert);Show_string2(start_line);}
+ 155   9                      }
+ 156   8                    }
+ 157   7                  }else{Show_string1(name);show_number(0x0b,3-n_alert);Show_string2(start_line);}
+ 158   6                }
+ 159   5                else{Show_string2(LockOpen);n_alert=0;LED=0;delay_s(1);Show_string1(name);show_number(0x0b,3-n_alert)
+             -;Show_string2(start_line);LED=1;}
+ 160   5                flag=0;
+ 161   5                k=0;
+ 162   5                flag_d=0;
+ 163   5              }
+ 164   4            }     
+ 165   3          }
+ 166   2          
+ 167   2          
+ 168   2          
+ 169   2          //  模式1：修改密码
+ 170   2          if(mode==1){ 
+ 171   3            while(mode==1){
+ 172   4              //  模式选择页面
+ 173   4              Show_string1(mode_line);
+C51 COMPILER V9.60.0.0   MIAN                                                              02/22/2023 14:14:46 PAGE 4   
+
+ 174   4              Show_string2(mode1);
+ 175   4              KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 176   4              if(flag==3){
+ 177   5                flag=0;
+ 178   5                mode=3;
+ 179   5                while(flag!=3){
+ 180   6                  // 修改模式选择         
+ 181   6                  Show_string1(mode2_0);
+ 182   6                  if(mode==3){Show_string2(mode2_1);flag_chg=1;}
+ 183   6                  if(mode==0){Show_string2(mode2_2);mode=2;flag_chg=2;}
+ 184   6                  KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 185   6                  if(flag==2&k==0){flag=3;mode=1;k='a';}  // 返回
+ 186   6                  //  初始密码修改
+ 187   6                  if(flag==3&flag_chg==1&k!='a'){
+ 188   7                    //  旧密码 
+ 189   7                    flag=0;
+ 190   7                    Show_string1(old_p);
+ 191   7                    Show_string2(start_line);
+ 192   7                    while(flag!=3){             
+ 193   8                      KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 194   8                      if(flag==2&k==0){flag=3;mode=1;k='a';}  // 返回
+ 195   8                      InPut(&k, &flag, &start_line, TempPassword);
+ 196   8                      if(flag==3&k<5&k!='a'){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);Show
+             -_string1(old_p);Show_string2(start_line);}
+ 197   8                      //  初始密码浏览
+ 198   8                      if(flag==3&k>=5&k!='a'){
+ 199   9                        Read(CurrentPassword,0,6);
+ 200   9                        for(j=0;j<6;j++){
+ 201  10                          if(CurrentPassword[j]==TempPassword[j]){flag_d=1;}
+ 202  10                          else{flag_d=0;break;}
+ 203  10                        }
+ 204   9                        if(flag_d==0){Show_string2(Er_try);delay_s(1);Show_string2(start_line);flag=0;k=0;}else {
+ 205  10                          //  新密码
+ 206  10                          flag=0 ;
+ 207  10                          flag_d=0;
+ 208  10                          k=0;
+ 209  10                          Show_string1(new_p);
+ 210  10                          Show_string2(start_line);
+ 211  10                          while(flag!=3){             
+ 212  11                            KeyDown(&t, &mode, &k, InitPassword, &flag);
+ 213  11                            if(flag==2&k==0){flag=3;mode=1;k='a';}  // 返回
+ 214  11                            InPut(&k, &flag, &start_line, InitPassword);
+ 215  11                            if(flag==3&k<5&k!='a'){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);S
+             -how_string1(new_p);Show_string2(start_line);}
+ 216  11                            if(flag==3&k>=5&k!='a'){k='a';flag=3;mode=0;Write(InitPassword,0,6);Show_string2(ResetOK);delay
+             -_s(1);}
+ 217  11                          }
+ 218  10                        }
+ 219   9                      }
+ 220   8                    }
+ 221   7                    flag_chg=0;
+ 222   7                    flag=0;
+ 223   7                    if(k=='a'){flag=3;mode=0;}
+ 224   7                  }
+ 225   6                  //  用户设置密码修改
+ 226   6                  if(flag==3&flag_chg==2&k!='a'){
+ 227   7                    if(num>1){
+ 228   8                      //  旧密码 
+ 229   8                      flag=0;
+ 230   8                      Show_string1(old_p);
+ 231   8                      Show_string2(start_line);
+ 232   8                      while(flag!=3){             
+C51 COMPILER V9.60.0.0   MIAN                                                              02/22/2023 14:14:46 PAGE 5   
+
+ 233   9                        KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 234   9                        if(flag==2&k==0){flag=3;mode=1;k='a';}  // 返回
+ 235   9                        InPut(&k, &flag, &start_line, TempPassword);
+ 236   9                        if(flag==3&k<5&k!='a'){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);Sho
+             -w_string1(old_p);Show_string2(start_line);}
+ 237   9                        //  已保存密码浏览
+ 238   9                        if(flag==3&k>=5&k!='a'){
+ 239  10                          for(i=1;i<num;i++){
+ 240  11                            Read(CurrentPassword,6*i,6);
+ 241  11                            for(j=0;j<6;j++){
+ 242  12                              if(CurrentPassword[j]==TempPassword[j]){flag_d=1;flag_c=6*i;}
+ 243  12                              else{flag_d=0;break;}
+ 244  12                            }
+ 245  11                            if(flag_d==1)break;
+ 246  11                          }
+ 247  10                          if(flag_d==0){Show_string2(Er_try);delay_s(1);Show_string2(start_line);flag=0;k=0;}else {
+ 248  11                            //  新密码
+ 249  11                            flag=0 ;
+ 250  11                            flag_d=0;
+ 251  11                            k=0;
+ 252  11                            Show_string1(new_p);
+ 253  11                            Show_string2(start_line);
+ 254  11                            while(flag!=3){             
+ 255  12                              KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 256  12                              if(flag==2&k==0){flag=3;mode=1;k='a';}  // 返回
+ 257  12                              InPut(&k, &flag, &start_line, TempPassword);
+ 258  12                              if(flag==3&k<5&k!='a'){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);
+             -Show_string1(new_p);Show_string2(start_line);}
+ 259  12                              if(flag==3&k>=5&k!='a'){k='a';flag=3;mode=0;Write(TempPassword,flag_c,6);Show_string2(ResetOK)
+             -;delay_s(1);}
+ 260  12                            }
+ 261  11                          }
+ 262  10                        }
+ 263   9                      }
+ 264   8                      flag_chg=0;
+ 265   8                      flag=0;
+ 266   8                      if(k=='a'){flag=3;mode=0;}
+ 267   8                    }else{Show_string2(delete_s2);delay_s(1);flag=0;mode=0;}
+ 268   7                  }         
+ 269   6                }
+ 270   5              }
+ 271   4              flag_chg=0;
+ 272   4              flag=0;
+ 273   4              k=0;
+ 274   4            }
+ 275   3          }
+ 276   2          
+ 277   2          
+ 278   2          
+ 279   2          //  模式2：添加新用户
+ 280   2          if(mode==2){ 
+ 281   3            while(mode==2){
+ 282   4              // 模式选择页面
+ 283   4              Show_string1(mode_line);
+ 284   4              Show_string2(mode2);
+ 285   4              KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 286   4              
+ 287   4              // 页面设置
+ 288   4              if(flag==3){
+ 289   5                flag=0;
+ 290   5                Show_string1(username);
+ 291   5                show_number(0X0E,num);show_string(0X0F,"=");
+C51 COMPILER V9.60.0.0   MIAN                                                              02/22/2023 14:14:46 PAGE 6   
+
+ 292   5                Show_string2(start_line);
+ 293   5                while(flag!=3){   
+ 294   6                  KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 295   6                  if(flag==2&k==0){flag=3;mode=2;k='a';}  // 返回
+ 296   6                  InPut(&k, &flag, start_line, TempPassword);
+ 297   6                  if(flag==3&k<5&k!='a'){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);Show_s
+             -tring1(username);show_number(0X0E,num);show_string(0X0F,"=");Show_string2(start_line);} //  密码位数不足
+ 298   6                  if(flag==3&k>=5&k!='a'){
+ 299   7                    for(i=0;i<num;i++){
+ 300   8                      Read(CurrentPassword,6*i,6);
+ 301   8                      for(j=0;j<6;j++){
+ 302   9                        if(CurrentPassword[j]==TempPassword[j]){flag_d=1;}
+ 303   9                        else{flag_d=0;break;}
+ 304   9                      }
+ 305   8                      if(flag_d==1)break;
+ 306   8                    }
+ 307   7                    if(flag_d==1){Show_string2(warn_a);delay_s(1);Show_string2(start_line);flag=0;k=0;}
+ 308   7                    else {mode=0;k=0;Write(TempPassword,6*num,6);num+=1;Show_string2(right_a);delay_s(1);}
+ 309   7                    }
+ 310   6                  }
+ 311   5                flag=0;
+ 312   5                k=0;
+ 313   5              }
+ 314   4            }
+ 315   3          }
+ 316   2          
+ 317   2          
+ 318   2          //  删除密码
+ 319   2          if(mode==3){
+ 320   3            while(mode==3){
+ 321   4              // 模式选择页面
+ 322   4              Show_string1(mode_line);
+ 323   4              Show_string2(mode3);
+ 324   4              KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 325   4              if(flag==3){
+ 326   5                flag=0;
+ 327   5                while(flag!=3){
+ 328   6                  // 删除模式选择         
+ 329   6                  Show_string1(mode3_0);
+ 330   6                  if(mode==3){Show_string2(mode3_1);flag_chg=1;}
+ 331   6                  if(mode==0){Show_string2(mode3_2);mode=2;flag_chg=2;}
+ 332   6                  KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 333   6                  if(flag==2&k==0){flag=3;mode=3;k='a';}  // 返回           
+ 334   6                  if(flag==3&flag_chg==1&k!='a'){ // 删除全部(不包括初始密码)
+ 335   7                    if(num>1){
+ 336   8                      num=1;
+ 337   8                      flag=3;mode=0;
+ 338   8                      Show_string2(delete_s);delay_s(1);
+ 339   8                    }else{Show_string2(delete_s2);delay_s(1);flag=0;mode=3;}
+ 340   7                  }
+ 341   6                  if(flag==3&flag_chg==2&k!='a'){ // 删除1个(不包括初始密码)
+ 342   7                    if(num>1){
+ 343   8                      flag=0;
+ 344   8                      Show_string1(old_p);
+ 345   8                      Show_string2(start_line);
+ 346   8                      while(flag!=3){             
+ 347   9                        KeyDown(&t, &mode, &k, TempPassword, &flag);
+ 348   9                        if(flag==2&k==0){flag=3;mode=1;k='a';}  // 返回
+ 349   9                        InPut(&k, &flag, &start_line, TempPassword);
+ 350   9                        if(flag==3&k<5&k!='a'){flag=0;k=0;Show_string1(try_again);Show_string2(try_again2);delay_s(1);Sho
+             -w_string1(old_p);Show_string2(start_line);}
+ 351   9                        //  已保存密码浏览
+C51 COMPILER V9.60.0.0   MIAN                                                              02/22/2023 14:14:46 PAGE 7   
+
+ 352   9                        if(flag==3&k>=5&k!='a'){
+ 353  10                          for(i=1;i<num;i++){
+ 354  11                            Read(CurrentPassword,6*i,6);
+ 355  11                            for(j=0;j<6;j++){
+ 356  12                              if(CurrentPassword[j]==TempPassword[j]){flag_d=1;flag_c=i;}
+ 357  12                              else{flag_d=0;break;}
+ 358  12                            }
+ 359  11                            if(flag_d==1)break;
+ 360  11                          }
+ 361  10                          if(flag_d==0){Show_string2(Er_try);delay_s(1);Show_string2(start_line);flag=0;k=0;}else {
+ 362  11                            for(i=flag_c;i<num;i++){
+ 363  12                              if(i<num-1){Read(CurrentPassword,6*(i+1),6);Write(CurrentPassword,6*i,6);}                    
+ 364  12                            }
+ 365  11                            num-=1;
+ 366  11                            flag=3;mode=0;Show_string2(delete_s);delay_s(1);
+ 367  11                          }
+ 368  10                        }
+ 369   9                      } 
+ 370   8                    }else{Show_string2(delete_s2);delay_s(1);flag=0;mode=0;}              
+ 371   7                  }
+ 372   6                }
+ 373   5                flag_chg=0;
+ 374   5                flag=0;
+ 375   5                k=0;
+ 376   5              }       
+ 377   4            }
+ 378   3          }
+ 379   2        }
+ 380   1      }
+ 381          
+ 382          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4253    ----
+   CONSTANT SIZE    =    443    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     27       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

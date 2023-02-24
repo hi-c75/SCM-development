@@ -1,0 +1,6 @@
+".\Objects\mian.obj",
+".\Objects\lcd.obj",
+".\Objects\key.obj",
+".\Objects\save.obj" 
+TO ".\Objects\按键系统" 
+PRINT(".\Listings\按键系统.m51")

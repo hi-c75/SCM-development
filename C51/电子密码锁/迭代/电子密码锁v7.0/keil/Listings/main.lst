@@ -1,0 +1,49 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              02/14/2023 18:09:18 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: d:\work\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\ma
+                    -in.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include "reg52.h"
+   2          #include "lcd.h"
+   3          
+   4          void delay_ms(int n){
+   5   1        int i,j;
+   6   1        for(i=n;i>0;i--)
+   7   1        for(j=115;j>0;j--);
+   8   1      }
+   9          
+  10          void main() 
+  11          { 
+  12   1          unsigned char m=0;
+  13   1          lcd_init();   //液晶初始化
+  14   1          lcd_wcom(0x80);   //显示地址设为C0H，下排第一位 
+  15   1          for(m=0;m<6;m++)     //将table[]中的数据依次写入1602显示
+  16   1          {
+  17   2            lcd_wdat(table[m]); 
+  18   2            delay_ms(600);
+  19   2            lcd_wcom(0x80+m);  //回退
+  20   2            lcd_wdat(0x2A);
+  21   2            delay_ms(300);
+  22   2          }
+  23   1          lcd_wcom(0x0c); //关光标、关字符闪烁
+  24   1          while(1);   
+  25   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    105    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       1
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

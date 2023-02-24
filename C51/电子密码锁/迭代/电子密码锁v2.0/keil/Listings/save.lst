@@ -1,0 +1,179 @@
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 20:57:01 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SAVE
+OBJECT MODULE PLACED IN .\Objects\save.obj
+COMPILER INVOKED BY: d:\work\keil\C51\BIN\C51.EXE save.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\sa
+                    -ve.lst) TABS(2) OBJECT(.\Objects\save.obj)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          #include <save.h>
+   4          #include <lcd.h>
+   5          
+   6          
+   7          void Start() //  启动
+   8          {
+   9   1        SDA = 1;                          //发送起始条件数据信号
+  10   1        delay_ms(1);
+  11   1        SCL = 1;
+  12   1        delay_ms(1);
+  13   1        SDA = 0;                          //发送起始信号
+  14   1        delay_ms(1);
+  15   1        SCL = 0;                          //时钟操作
+  16   1        delay_ms(1);
+  17   1      }
+  18          
+  19          void Stop() //  停止
+  20          {
+  21   1        SCL = 0;                          //发送结束条件的数据信号                        //发送结束条件的时钟信号
+  22   1        delay_ms(1);
+  23   1        SDA = 0;                          //结束条件建立时间大于4us
+  24   1        delay_ms(1);
+  25   1        SCL = 1;                          //发送I2C总线结束命令
+  26   1        delay_ms(1);
+  27   1        SDA = 1;
+  28   1        delay_ms(1);
+  29   1      }
+  30          
+  31          bit Write8bit(u8 input) //  写数据
+  32          {
+  33   1        u8 tmp;
+  34   1        for(tmp =0;tmp!=8;tmp++)
+  35   1        {
+  36   2          SDA = (bit)(input&0x80);
+  37   2          delay_ms(1);
+  38   2          SCL = 1;
+  39   2          delay_ms(1);
+  40   2          SCL = 0;
+  41   2          delay_ms(1);
+  42   2          input = input << 1;
+  43   2        }
+  44   1        return 1;
+  45   1      }
+  46          
+  47          u8 Read8Bit() //  读数据
+  48          {
+  49   1        u8 tmp,k,rbyte;
+  50   1        SCL=0;delay_ms(1);
+  51   1        SDA=1;
+  52   1        for(tmp=8;tmp!=0;tmp--)
+  53   1        {
+  54   2          SCL = 1;
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 20:57:01 PAGE 2   
+
+  55   2          delay_ms(1);
+  56   2          if(SDA==1)k=1;else k=0;
+  57   2          rbyte = rbyte<<1;
+  58   2          rbyte = rbyte|k;
+  59   2          SCL = 0;    
+  60   2        }
+  61   1        delay_ms(1);
+  62   1        return (rbyte);
+  63   1      }
+  64          
+  65          
+  66          void Ack() //  应答
+  67          {
+  68   1        SDA = 0;
+  69   1        delay_ms(1);
+  70   1        SCL = 1;
+  71   1        delay_ms(1);
+  72   1        SCL = 0;
+  73   1        delay_ms(1);
+  74   1        SDA = 1;
+  75   1        delay_ms(1);
+  76   1      }
+  77          
+  78          void NoAck() //  非应答
+  79          {
+  80   1        
+  81   1        SDA = 1;
+  82   1        delay_ms(1);
+  83   1        SCL = 1;
+  84   1        delay_ms(1);
+  85   1        SCL = 0;
+  86   1        delay_ms(1);
+  87   1      }
+  88          
+  89          bit TestAck() //  检测应答
+  90          {
+  91   1        bit ErrorBit;
+  92   1        SDA = 1;
+  93   1        delay_ms(1);
+  94   1        SCL = 1;
+  95   1        delay_ms(1);
+  96   1        ErrorBit = SDA;
+  97   1        SCL = 0;
+  98   1        delay_ms(1);
+  99   1        return(ErrorBit);
+ 100   1      }
+ 101          
+ 102          void WriteI2C(u8 *Wdata, u8 RomAddress, u8 number) //  写时序
+ 103          {
+ 104   1        Start();//先发送一个起始信号
+ 105   1        Write8bit(WriteDeviceAddress);//发送0xA0(第0位为0表示写)
+ 106   1        if (TestAck()){  //非应答的话那就直接停止返回
+ 107   2        Stop();
+ 108   2        return;
+ 109   2        }
+ 110   1        Write8bit(RomAddress); //发送你要存入的地址
+ 111   1        if (TestAck()){
+ 112   2        Stop();
+ 113   2        }
+ 114   1        for(;number!=0;number--){ //写入数据
+ 115   2          Write8bit(*Wdata);
+ 116   2          if (TestAck()){
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 20:57:01 PAGE 3   
+
+ 117   3          Stop();
+ 118   3          return;
+ 119   3          }
+ 120   2           Wdata++;
+ 121   2        }
+ 122   1        Stop(); //结束写操作
+ 123   1        delay_ms(10);
+ 124   1      }
+ 125          
+ 126          void ReadI2C(u8* RamAddress,u8 RomAddress,u8 bytes) //  读时序
+ 127          {
+ 128   1        Start();
+ 129   1        Write8bit(WriteDeviceAddress); //先发送的芯片地址0xa0
+ 130   1         if (TestAck()){
+ 131   2          Stop();
+ 132   2         }
+ 133   1        Write8bit(RomAddress);//在发送要读取的地址
+ 134   1         if (TestAck()){
+ 135   2          Stop();
+ 136   2         }
+ 137   1        Start(); //重新给个起始信号
+ 138   1        Write8bit(ReadDeviceAddress); //发送0A1
+ 139   1         if (TestAck()){
+ 140   2          Stop();
+ 141   2         }
+ 142   1        while(bytes != 1)
+ 143   1        {
+ 144   2          *RamAddress++ = Read8Bit(); //读取数据
+ 145   2          Ack();//然后给个应答
+ 146   2          bytes--;
+ 147   2        }
+ 148   1        *RamAddress = Read8Bit();
+ 149   1        NoAck();//读取结束，发出一个非应答信号
+ 150   1        Stop();
+ 151   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    429    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      15
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

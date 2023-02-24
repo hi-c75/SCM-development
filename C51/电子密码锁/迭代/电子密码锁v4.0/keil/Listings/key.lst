@@ -1,0 +1,94 @@
+C51 COMPILER V9.60.0.0   KEY                                                               02/17/2023 12:06:16 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE KEY
+OBJECT MODULE PLACED IN .\Objects\key.obj
+COMPILER INVOKED BY: d:\work\keil\C51\BIN\C51.EXE key.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\key
+                    -.lst) TABS(2) OBJECT(.\Objects\key.obj)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <lcd.h>
+   3          #include <key.h>
+   4          #include <save.h>
+   5          
+   6          
+   7          //  检测有按键按下并读取键值
+   8          void KeyDown(u8 *t, u8 *mode, u8 *k, u8 *arr, u8 *flag)
+   9          { 
+  10   1        u8 flag_c = 0; //  清除标志
+  11   1        GPIO_KEY=0xf0;
+  12   1        if(GPIO_KEY!=0xf0) //  读取按键是否按下
+  13   1        {
+  14   2          delay_ms(3); //  延时10ms进行消抖
+  15   2          if(GPIO_KEY!=0xf0) //  再次检测键盘是否按下
+  16   2          { 
+  17   3            //  测试行
+  18   3            GPIO_KEY=0XF0;
+  19   3            switch(GPIO_KEY)
+  20   3            {
+  21   4              case(0X70): if(*k<6){*flag=1;arr[*k]=7;}break;
+  22   4              case(0Xb0): if(*k<6){*flag=1;arr[*k]=4;}break;
+  23   4              case(0Xd0): if(*k<6){*flag=1;arr[*k]=1;}break;
+  24   4              case(0Xe0): flag_c=1;break;
+  25   4              default: break;
+  26   4            }
+  27   3          }
+  28   2        }
+  29   1        GPIO_KEY=0x0f;
+  30   1        if(GPIO_KEY!=0x0f) //  读取按键是否按下
+  31   1        {
+  32   2          delay_ms(3); //  延时10ms进行消抖
+  33   2          if(GPIO_KEY!=0x0f) //  再次检测键盘是否按下
+  34   2          { 
+  35   3            //  测试列
+  36   3            GPIO_KEY=0X0F;
+  37   3            switch(GPIO_KEY)
+  38   3            {
+  39   4              case(0X07): if(flag_c==1)*flag=3;else if(*k<6)arr[*k]=arr[*k]+0;break;
+  40   4              case(0X0b):if(*k<6){*flag=1;if(flag_c==1)arr[*k]=0;else arr[*k]=arr[*k]+1;}break; //  数字作用          
+  41   4              case(0X0d): if(flag_c==1)*flag=2;else if(*k<6)arr[*k]=arr[*k]+2;break;
+  42   4              case(0X0e): 
+  43   4                if(*k==0&flag_c==1&*t==1){*mode+=1;if(*mode==3)*mode=0;} //  调整模式 
+  44   4                else *flag=0;break;
+  45   4              default: break;
+  46   4            }
+  47   3          }
+  48   2        }
+  49   1        while(GPIO_KEY==0X07||GPIO_KEY==0X0b||GPIO_KEY==0X0d||GPIO_KEY==0X0e); //  检测按键松手检测
+  50   1      }
+  51          
+  52          
+  53          //  输入密码
+  54          void InPut(u8 *k, u8 *flag, u8 code *start_line, u8 *arr)
+C51 COMPILER V9.60.0.0   KEY                                                               02/17/2023 12:06:16 PAGE 2   
+
+  55          {
+  56   1        if(*flag==1) //  输入密码
+  57   1        { 
+  58   2          if(*k<=6){show_number(0x49+*k,arr[*k]);delay_ms(250);show_string(0x49+*k,"*");}
+  59   2          *k += 1;
+  60   2          *flag = 0;
+  61   2        }
+  62   1        if(*flag==2) // 清除
+  63   1        {
+  64   2          Show_string2(start_line);
+  65   2          *k = 0;
+  66   2          *flag = 0;
+  67   2        }
+  68   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    753    ----
+   CONSTANT SIZE    =      2    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      27
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

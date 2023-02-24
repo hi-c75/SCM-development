@@ -1,0 +1,228 @@
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 17:42:49 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SAVE
+OBJECT MODULE PLACED IN .\Objects\save.obj
+COMPILER INVOKED BY: d:\work\keil\C51\BIN\C51.EXE save.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\sa
+                    -ve.lst) TABS(2) OBJECT(.\Objects\save.obj)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          #include <save.h>
+   4          #include <lcd.h>
+   5          
+   6          void nod2()
+   7          {
+   8   1        u8 i;
+   9   1        for(i=0;i<13;i++)_nop_();
+  10   1      }
+  11          
+  12          void Start() //  启动
+  13          {
+  14   1        SDA = 1;                          //发送起始条件数据信号
+  15   1        nod2();
+  16   1        SCL = 1;
+  17   1        nod2();
+  18   1        SDA = 0;                          //发送起始信号
+  19   1        nod2();
+  20   1        SCL = 0;                          //时钟操作
+  21   1        nod2();
+  22   1      }
+  23          
+  24          void Stop() //  停止
+  25          {
+  26   1        SDA = 0;                          //发送结束条件的数据信号                        //发送结束条件的时钟信号
+  27   1        nod2();
+  28   1        SCL = 1;                          //结束条件建立时间大于4us
+  29   1        nod2();
+  30   1        SDA = 1;                          //发送I2C总线结束命令
+  31   1        nod2();
+  32   1        SCL = 0;
+  33   1        nod2();
+  34   1      }
+  35          
+  36          bit Write8bit(unsigned char input) //  写数据
+  37          {
+  38   1        unsigned char tmp;
+  39   1        for(tmp =0;tmp!=8;tmp++)
+  40   1        {
+  41   2          input<<= 1;
+  42   2          SDA = CY;
+  43   2          nod2();
+  44   2          SCL = 1;
+  45   2          nod2();
+  46   2          SCL = 0;
+  47   2          nod2();
+  48   2          SDA = 0;
+  49   2          nod2();
+  50   2        }
+  51   1        return 1;
+  52   1      }
+  53          
+  54          unsigned char Read8Bit() //  读数据
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 17:42:49 PAGE 2   
+
+  55          {
+  56   1        unsigned char tmp,rbyte = 0;
+  57   1        for(tmp=8;tmp!=0;tmp--)
+  58   1        {
+  59   2          SDA = 1;
+  60   2          nod2();
+  61   2          SCL = 1;
+  62   2          nod2();
+  63   2          rbyte = (rbyte<<1)|((u8)SDA);
+  64   2          SCL = 0;
+  65   2          nod2();   
+  66   2        }
+  67   1        return (rbyte);
+  68   1      }
+  69          
+  70          void Ack() //  应答
+  71          {
+  72   1        SDA = 0;
+  73   1        nod2();
+  74   1        SCL = 1;
+  75   1        nod2();
+  76   1        SCL = 0;
+  77   1        nod2();
+  78   1        SDA = 1;
+  79   1        nod2();
+  80   1      }
+  81          
+  82          void NoAck() //  非应答
+  83          {
+  84   1        
+  85   1        SDA = 1;
+  86   1        nod2();
+  87   1        SCL = 1;
+  88   1        nod2();
+  89   1        SCL = 0;
+  90   1        nod2();
+  91   1        SDA = 0;
+  92   1        nod2();
+  93   1      }
+  94          
+  95          bit TestAck() //  检测应答
+  96          {
+  97   1        bit ErrorBit;
+  98   1        SDA = 1;
+  99   1        nod2();
+ 100   1        SCL = 1;
+ 101   1        nod2();
+ 102   1        ErrorBit = SDA;
+ 103   1        SCL = 0;
+ 104   1        nod2();
+ 105   1        return(ErrorBit);
+ 106   1      }
+ 107          
+ 108          void WriteI2C(unsigned char *Wdata, unsigned char RomAddress, unsigned char number) //  写时序
+ 109          {
+ 110   1        Start();//先发送一个起始信号
+ 111   1        Write8bit(WriteDeviceAddress);//发送0xA0(第0位为0表示写)
+ 112   1        if (TestAck()){  //非应答的话那就直接停止返回
+ 113   2        Stop();
+ 114   2        return;
+ 115   2        }
+ 116   1        Write8bit(RomAddress); //发送你要存入的地址
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 17:42:49 PAGE 3   
+
+ 117   1        if (TestAck()){
+ 118   2        Stop();
+ 119   2        }
+ 120   1        for(;number!=0;number--){ //写入数据
+ 121   2          Write8bit(*Wdata);
+ 122   2          if (TestAck()){
+ 123   3          Stop();
+ 124   3          return;
+ 125   3          }
+ 126   2           Wdata++;
+ 127   2        }
+ 128   1        Stop(); //结束写操作
+ 129   1        delay_ms(10);
+ 130   1      }
+ 131          
+ 132          void ReadI2C(unsigned char* RamAddress,unsigned char RomAddress,unsigned char bytes) //  读时序
+ 133          {
+ 134   1        Start();
+ 135   1        Write8bit(WriteDeviceAddress); //先发送的芯片地址0xa0
+ 136   1         if (TestAck()){
+ 137   2          Stop();
+ 138   2         }
+ 139   1        Write8bit(RomAddress);//在发送要读取的地址
+ 140   1         if (TestAck()){
+ 141   2          Stop();
+ 142   2         }
+ 143   1        Start(); //重新给个起始信号
+ 144   1        Write8bit(ReadDeviceAddress); //发送0A1
+ 145   1         if (TestAck()){
+ 146   2          Stop();
+ 147   2         }
+ 148   1        while(bytes != 1)
+ 149   1        {
+ 150   2          *RamAddress = Read8Bit(); //读取数据
+ 151   2          Ack();//然后给个应答
+ 152   2          RamAddress++; 
+ 153   2          bytes--;
+ 154   2        }
+ 155   1        *RamAddress = Read8Bit();
+ 156   1        NoAck();//读取结束，发出一个非应答信号
+ 157   1        Stop();
+ 158   1      }
+ 159          
+ 160          char* itoa(int num,char* str,int radix)
+ 161          {
+ 162   1          char index[]="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";//索引表
+ 163   1          unsigned unum;//存放要转换的整数的绝对值,转换的整数可能是负数
+ 164   1          int i=0,j,k;//i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情
+             -况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
+ 165   1          char temp;
+ 166   1          //获取要转换的整数的绝对值
+ 167   1          if(radix==10&&num<0)//要转换成十进制数并且是负数
+ 168   1          {
+ 169   2              unum=(unsigned)-num;//将num的绝对值赋给unum
+ 170   2              str[i++]='-';//在字符串最前面设置为'-'号，并且索引加1
+ 171   2          }
+ 172   1          else unum=(unsigned)num;//若是num为正，直接赋值给unum
+ 173   1       
+ 174   1          //转换部分，注意转换后是逆序的
+ 175   1          do
+ 176   1          {
+ 177   2              str[i++]=index[unum%(unsigned)radix];//取unum的最后一位，并设置为str对应位，指示索引加1
+C51 COMPILER V9.60.0.0   SAVE                                                              02/16/2023 17:42:49 PAGE 4   
+
+ 178   2              unum/=radix;//unum去掉最后一位
+ 179   2       
+ 180   2          }while(unum);//直至unum为0退出循环
+ 181   1       
+ 182   1          str[i]='\0';//在字符串最后添加'\0'字符，c语言字符串以'\0'结束。
+ 183   1       
+ 184   1          //将顺序调整过来
+ 185   1          if(str[0]=='-') k=1;//如果是负数，符号不用调整，从符号后面开始调整
+ 186   1          else k=0;//不是负数，全部都要调整//临时变量，交换两个值时用到
+ 187   1          for(j=k;j<=(i-1)/2;j++)//头尾一一对称交换，i其实就是字符串的长度，索引最大值比长度少1
+ 188   1          {
+ 189   2              temp=str[j];//头部赋值给临时变量
+ 190   2              str[j]=str[i-1+k-j];//尾部赋值给头部
+ 191   2              str[i-1+k-j]=temp;//将临时变量的值(其实就是之前的头部值)赋给尾部
+ 192   2          }
+ 193   1       
+ 194   1          return str;//返回转换后的字符串
+ 195   1       
+ 196   1      }
+ 197          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    649    ----
+   CONSTANT SIZE    =     37    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      63
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

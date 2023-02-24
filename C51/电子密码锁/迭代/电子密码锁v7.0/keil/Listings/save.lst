@@ -1,0 +1,155 @@
+C51 COMPILER V9.60.0.0   SAVE                                                              02/22/2023 14:14:47 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SAVE
+OBJECT MODULE PLACED IN .\Objects\save.obj
+COMPILER INVOKED BY: d:\work\keil\C51\BIN\C51.EXE save.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\sa
+                    -ve.lst) TABS(2) OBJECT(.\Objects\save.obj)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          #include <save.h>
+   4          #include <lcd.h>
+   5          
+   6          
+   7          /*起始条件*/
+   8          
+   9          void Start(void)
+  10          {
+  11   1        SDA=1;
+  12   1        SCL=1;
+  13   1        Nop();
+  14   1        SDA=0;
+  15   1        Nop();
+  16   1      }
+  17          
+  18          
+  19           /*停止条件*/
+  20          void Stop(void)
+  21          {
+  22   1        SDA=0;
+  23   1        SCL=1;
+  24   1        Nop();
+  25   1        SDA=1;
+  26   1        Nop();
+  27   1      }
+  28          
+  29          /*应答位*/
+  30          void Ack(void)
+  31          {
+  32   1        SDA=0;
+  33   1        Nop();
+  34   1        SCL=1;
+  35   1        Nop();
+  36   1        SCL=0;
+  37   1      }
+  38          
+  39          /*反向应答位*/
+  40          void NoAck(void)
+  41          {
+  42   1        SDA=1;
+  43   1        Nop();
+  44   1        SCL=1;
+  45   1        Nop();
+  46   1        SCL=0;
+  47   1      }
+  48          
+  49           /*发送数据子程序，Data为要求发送的数据*/
+  50          void Send(u8 Data)
+  51          {
+  52   1        u8 BitCounter=8;
+  53   1        u8 temp;
+  54   1        do
+C51 COMPILER V9.60.0.0   SAVE                                                              02/22/2023 14:14:47 PAGE 2   
+
+  55   1        {
+  56   2          temp=Data;
+  57   2          SCL=0;
+  58   2          Nop();
+  59   2          if((temp&0x80)==0x80)SDA=1;else SDA=0;
+  60   2          SCL=1;
+  61   2          temp=Data<<1;
+  62   2          Data=temp;
+  63   2          BitCounter--;
+  64   2        }
+  65   1        while(BitCounter);
+  66   1        SCL=0;
+  67   1      }
+  68          
+  69          /*读一字节的数据，并返回该字节值*/
+  70          u8 Readb(void)
+  71          {
+  72   1        u8 temp=0;
+  73   1        u8 temp1=0;
+  74   1        u8 BitCounter=8;
+  75   1        SDA=1;
+  76   1        do{
+  77   2          SCL=0;
+  78   2          Nop();
+  79   2          SCL=1;
+  80   2          Nop();
+  81   2          if(SDA)temp=temp|0x01;else temp=temp&0xfe;
+  82   2          if(BitCounter-1){temp1=temp<<1;temp=temp1;}
+  83   2          BitCounter--;
+  84   2        }
+  85   1        while(BitCounter);
+  86   1        return(temp);
+  87   1        }
+  88          
+  89          void Write(u8 Data[],u8 Address,u8 Num)
+  90          {
+  91   1        u8 i;
+  92   1        u8 *PData;
+  93   1        PData=Data;
+  94   1        for(i=0;i<Num;i++){
+  95   2          Start();
+  96   2          Send(0xa0);
+  97   2          Ack();
+  98   2          Send(Address+i);
+  99   2          Ack();
+ 100   2          Send(*(PData+i));
+ 101   2          Ack();
+ 102   2          Stop();
+ 103   2          delay_ms(20);
+ 104   2        }
+ 105   1      }
+ 106          
+ 107          void Read(u8 Data[],u8 Address,u8 Num)
+ 108          {
+ 109   1        u8 i;
+ 110   1        u8 *PData;
+ 111   1        PData=Data;
+ 112   1        for(i=0;i<Num;i++){
+ 113   2          Start();
+ 114   2          Send(0xa0);
+ 115   2          Ack();
+ 116   2          Send(Address+i);
+C51 COMPILER V9.60.0.0   SAVE                                                              02/22/2023 14:14:47 PAGE 3   
+
+ 117   2          Ack();
+ 118   2          Start();
+ 119   2          Send(0xa1);
+ 120   2          Ack();
+ 121   2          *(PData+i)=Readb();
+ 122   2          SCL=0;
+ 123   2          NoAck();
+ 124   2          Stop();
+ 125   2        }
+ 126   1      }
+ 127          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    282    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      17
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
